@@ -1,0 +1,192 @@
+<!-- Copado Custom Validation Hub - ByPass Triggerred Validations -->
+<template>
+    <article class="slds-card">
+        <div class="slds-grid slds-gutters">
+            <!-- Vertical Navigation -->
+            <div class="slds-col slds-size_2-of-12 slds-p-around_small">
+                <lightning-vertical-navigation selected-item="customValidation">
+                    <lightning-vertical-navigation-section label="Copado Validations">
+                        <lightning-vertical-navigation-item label="Apex Lower API & New Account Field Validation" name="customValidation" onclick={openCustomManagement}></lightning-vertical-navigation-item>
+                        <lightning-vertical-navigation-item label="Static Code Analysis" name="staticCodeValidation" onclick={openCustomManagement}></lightning-vertical-navigation-item>
+                    </lightning-vertical-navigation-section>
+                </lightning-vertical-navigation>
+            </div>
+
+            <!-- Custom Validation Management -->
+            <div class="slds-col slds-size_10-of-12 slds-p-top_medium">
+                <template if:true={showSpinner}>
+                    <div class="spinnerHolder slds-align-middle slds-text-align_center">
+                        <lightning-spinner alternative-text="Loading" size="large"></lightning-spinner>
+                    </div>
+                </template>
+
+                <div class="slds-grid slds-size_12-of-12 slds-wrap">
+                    <div class="slds-col slds-size_12-of-12">
+                        <div class="slds-box slds-theme_shade slds-p-around_small">
+                            <span class="slds-text-heading_label slds-text-title_bold">Copado Custom Validation Management</span>
+                        </div>
+                    </div>
+
+                    <!-- Custom Validation -->
+                    <div class="slds-col slds-size_12-of-12 slds-p-top_small">
+                        <div class="slds-border_bottom">
+                            <span class="slds-text-heading_small slds-p-bottom_x-small">Custom validation details</span>
+                        </div>
+                        <lightning-layout multiple-rows="true">
+                            <lightning-layout-item padding="around-small" size="12">
+                                <!-- Static Code Analysis -->
+                                <lightning-layout if:true={isStaticCodeOpen}>
+                                    <lightning-layout-item padding="around-small" size="12">
+                                        <div class="slds-theme_shade slds-p-around_small" style="min-height: 20px;">
+                                            <div class="slds-p-bottom_x-small">
+                                                <span class="slds-text-heading_label">1. Vulnerability Blocker</span></br>
+                                            </div>
+                                            <span class="slds-text-body_regular">This validation prevents developers from introducing new vulnerabilities to Production org. The validation
+                                                                                    won't be triggered for any existing validation in Production org while its triggered only if a new vulnerability is introduced</span>
+                                        </div>
+                                    </lightning-layout-item>
+                                </lightning-layout>
+                            </lightning-layout-item>
+                        </lightning-layout>
+                        <div class="slds-theme_info slds-p-around_x-small">
+                            <span class="slds-text-heading_label slds-text-title_bold slds-p-right_x-small" style="color: white;">Instruction - </span>
+                            <span>Only CRM Administrators can by-pass the triggered custom validation and allow the developer to promote the User story.</span>
+                        </div>
+                    </div>
+
+                    <div class="slds-col slds-size_12-of-12 slds-p-top_medium">
+                        <div class="slds-border_bottom">
+                            <span class="slds-text-heading_small slds-p-bottom_x-small">Table of User stories which triggered Copado custom validation</span>
+                        </div>
+                        <div class="slds-p-around_small">
+                            <template if:true={showErrors}>
+                                <div class="slds-p-around_medium">
+                                    <div class="slds-notify slds-notify_alert slds-alert_error" role="alert">
+                                        <span class="slds-assistive-text">error</span>
+                                        <h2>{errorMessage}</h2>
+                                    </div>
+                                </div>
+                            </template>
+
+                            <c-util-datatable if:true={showDatatable}
+                                              records={datatableRows}
+                                              total-records={datatableRows.length}
+                                              columns = {datatableColumns}
+                                              key-field="Id"
+                                              show-search-box="true"
+                                              hide-checkbox-column="true"
+                                              max-row-selection="0"
+                                              table-height="270"
+                                              onparenthandlerowaction={handleRowAction}
+                                              css-classes="slds-max-medium-table_stacked-horizontal">
+                            </c-util-datatable>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Modal/Popup Box LWC starts here -->
+            <template if:true={isCopadoCusValModalOpen}>
+                <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open comments-modal slds-modal_small"><!--slds-modal_medium-->
+                    <div class="slds-modal__container">
+                        <header class="slds-modal__header">
+                            <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close" onclick={handleCloseBtn}>
+                                <lightning-icon icon-name="utility:close" alternative-text="close" size="small"></lightning-icon>
+                                <span class="slds-assistive-text">Close</span>
+                            </button>
+                            <h2 class="slds-text-heading_medium">By-pass Copado Custom Validation</h2>
+                        </header>
+                        <div class="modal-container slds-modal__content slds-p-around_medium">
+                            <div class="slds-form" role="list">
+                                <div class="slds-form__row">
+                                    <div class="slds-form__item" role="listitem">
+                                        <div class="slds-form-element slds-form-element_horizontal slds-is-editing">
+                                            <label class="slds-form-element__label">User Story Name</label>
+                                            <div class="slds-form-element__control">
+                                                <span class="slds-text-body_regular">{currUserStoryData.userStoryName}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="slds-form__row slds-p-top_small">
+                                    <div class="slds-form__item" role="listitem">
+                                        <div class="slds-form-element slds-form-element_horizontal slds-is-editing">
+                                            <label class="slds-form-element__label">User Story Owner</label>
+                                            <div class="slds-form-element__control">
+                                                <span class="slds-text-body_regular">{currUserStoryData.userStoryOwner}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="slds-form__row slds-p-top_small">
+                                    <div class="slds-form__item" role="listitem">
+                                        <div class="slds-form-element slds-form-element_horizontal slds-is-editing">
+                                            <label class="slds-form-element__label">User Story Title</label>
+                                            <div class="slds-form-element__control">
+                                                <span class="slds-text-body_regular">{currUserStoryData.userStoryTitle}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="slds-form__row slds-p-top_small">
+                                    <div class="slds-form__item" role="listitem">
+                                        <div class="slds-form-element slds-form-element_horizontal slds-is-editing">
+                                            <label class="slds-form-element__label">Triggered Custom Validations</label>
+                                            <div class="slds-form-element__control">
+                                                <span class="slds-badge slds-badge_lightest" if:true={currUserStoryData.isCodeAnalysisPassed}>Vulnerability Blocker Validation</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <!-- Static Code Analysis -->
+                                <div class="slds-form__row slds-p-top_small" if:true={currUserStoryData.isCodeAnalysisPassed}>
+                                    <div class="slds-form__item" role="listitem">
+                                        <div class="slds-form-element slds-form-element_horizontal slds-is-editing">
+                                            <label class="slds-form-element__label">Copado PMD vulnerability detail</label>
+                                            <div class="slds-form-element__control">
+                                                <lightning-datatable class="slds-scrollable_x"
+                                                                     key-field="componentName"
+                                                                     data={currUserStoryData.staticCodeValDetails}
+                                                                     columns={staticCodeValTbCols}
+                                                                     hide-checkbox-column
+                                                                     style="overflow: hidden; overflow-x: hidden;">
+                                                </lightning-datatable>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="slds-form__row slds-p-top_small">
+                                    <div class="slds-form__item" role="listitem">
+                                        <div class="slds-form-element slds-form-element_horizontal slds-is-editing">
+                                            <lightning-textarea name="reason"
+                                                                label="Reason to By-pass"
+                                                                disabled={isDisabled}
+                                                                placeholder="Enter the reason to by pass the validation"
+                                                                value={reasonToByPass}
+                                                                onchange={handleReasonChange}
+                                                                message-when-value-missing="Please fill the reason to by pass validation."
+                                                                required></lightning-textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <footer class="slds-modal__footer">
+                            <div style="position:relative;" >
+                                <lightning-button class="slds-p-right_medium" variant="brand-outline" label="Close" onclick={handleCloseBtn}></lightning-button>
+                                <lightning-button variant="brand" label="By-pass Validation" onclick={handleByPassValidation} disabled={isDisabled}></lightning-button>
+                                <lightning-spinner
+                                        if:true={showPopoverSpinner}
+                                        variant="brand"
+                                        size="small">
+                                </lightning-spinner>
+                            </div>
+                        </footer>
+                    </div>
+                </section>
+                <div class="slds-backdrop slds-backdrop_open"></div>
+            </template>
+        </div>
+    </article>
+</template>

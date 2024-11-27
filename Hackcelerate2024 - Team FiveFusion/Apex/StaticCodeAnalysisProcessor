@@ -1,0 +1,231 @@
+public with sharing class StaticCodeAnalysisProcessor {
+
+    public static Map<String, Integer> getStaticCodeResultsOnCredential(){
+        Copado_Custom_Validation__mdt validations = null;
+        Map<String, Integer> credentialComponentViolations = new Map<String, Integer>();
+        copado__Static_Code_Analysis_Result__c latestResult = null;
+        List<copado__Static_Code_Analysis_Violation__c> resultsFromCredentialRun = new List<copado__Static_Code_Analysis_Violation__c>();
+
+        try{
+            validations = Copado_Custom_Validation__mdt.getInstance('Custom_Validation');
+
+            if(validations != null){
+                String referenceCredentialName = validations.Static_Code_Result_Credential__c != null ? validations.Static_Code_Result_Credential__c : null;
+                copado__Org__c org = null;
+
+                if(String.isNotBlank(referenceCredentialName)) {
+                    //Get the credential ID from which the results needs to be processed
+                    org = [SELECT Id, Name FROM copado__Org__c WHERE Name = :referenceCredentialName LIMIT 1];
+
+                    if (String.isNotBlank(org.Id)) {
+                        //Get the latest static code analysis results from the org
+                        latestResult = [
+                                SELECT Name, CreatedDate, Id, copado__Number_of_Violations__c
+                                FROM copado__Static_Code_Analysis_Result__c
+                                WHERE copado__Org_Credential__c = :org.Id
+                                ORDER BY CreatedDate DESC
+                                LIMIT 1
+                        ];
+
+                        if(latestResult != null) {
+                            //Get the violations from the latest static code analysis results
+                            resultsFromCredentialRun = [
+                                    SELECT Name, CreatedDate, copado__File__c, copado__Line__c, copado__Message__c, copado__Priority__c, copado__Rule__c, copado__Score__c, copado__Resolution__c
+                                    FROM copado__Static_Code_Analysis_Violation__c
+                                    WHERE copado__Static_Code_Analysis_Result__r.Id =: latestResult.Id
+                            ];
+
+                            if(resultsFromCredentialRun.size() > 0){
+                                // Extract component names and violation counts from resultsFromCredentialAnalysis
+                                credentialComponentViolations = new Map<String, Integer>();
+                                for (copado__Static_Code_Analysis_Violation__c violation : resultsFromCredentialRun) {
+                                    if (credentialComponentViolations.containsKey(violation.copado__File__c)) {
+                                        credentialComponentViolations.put(violation.copado__File__c, credentialComponentViolations.get(violation.copado__File__c) + 1);
+                                    } else {
+                                        credentialComponentViolations.put(violation.copado__File__c, 1);
+                                    }
+                                }
+                            }
+                        }
+
+                    }
+                }
+            }
+        }catch(Exception e){
+            System.debug('Error in getStaticCodeResultsOnCredential: '+e.getMessage());
+        }
+
+        return credentialComponentViolations;
+    }
+
+    public static Map<String, Set<StaticCodeAnalysisResultWrapper>> getViolationsOnUSStaticCodeResults(Set<Id> staticCodeResultIds) {
+        List<copado__Static_Code_Analysis_Violation__c> violationsListInUserStory = new List<copado__Static_Code_Analysis_Violation__c>();
+        Map<String, Set<StaticCodeAnalysisResultWrapper>> violationComponentMap = new Map<String, Set<StaticCodeAnalysisResultWrapper>>();
+
+        try {
+            if (staticCodeResultIds != null) {
+                if (staticCodeResultIds.size() > 0) {
+                    violationsListInUserStory = [
+                            SELECT Name, CreatedDate, copado__File__c, copado__Line__c, copado__Message__c, copado__Priority__c, copado__Rule__c, copado__Score__c, copado__Resolution__c, copado__Static_Code_Analysis_Result__r.copado__User_Story__c
+                            FROM copado__Static_Code_Analysis_Violation__c
+                            WHERE copado__Static_Code_Analysis_Result__r.Id IN :staticCodeResultIds
+                    ];
+
+                    if (violationsListInUserStory.size() > 0) {
+
+                        for (copado__Static_Code_Analysis_Violation__c violation : violationsListInUserStory) {
+                            if (violationComponentMap.containsKey(violation.copado__Static_Code_Analysis_Result__r.copado__User_Story__c)) {
+                                Set<StaticCodeAnalysisResultWrapper> violationList = violationComponentMap.get(violation.copado__Static_Code_Analysis_Result__r.copado__User_Story__c);
+
+                                if(!violationList.isEmpty()){
+                                    Boolean fileExists = false;
+
+                                    for (StaticCodeAnalysisResultWrapper violationWrapper : violationList) {
+                                        if (violationWrapper.componentName.equals(violation.copado__File__c)) {
+                                            violationWrapper.violationCount = violationWrapper.violationCount + 1;
+                                            fileExists = true;
+                                        }
+                                    }
+
+                                    if(!fileExists){
+                                        StaticCodeAnalysisResultWrapper newViolationWrapper = new StaticCodeAnalysisResultWrapper();
+                                        newViolationWrapper.componentName = violation.copado__File__c;
+                                        newViolationWrapper.violationCount = 1;
+                                        violationList.add(newViolationWrapper);
+                                    }
+                                }
+                            } else {
+                                Set<StaticCodeAnalysisResultWrapper> violationList = new Set<StaticCodeAnalysisResultWrapper>();
+                                StaticCodeAnalysisResultWrapper violationWrapper = new StaticCodeAnalysisResultWrapper();
+                                violationWrapper.componentName = violation.copado__File__c;
+                                violationWrapper.violationCount = 1;
+                                violationList.add(violationWrapper);
+
+                                violationComponentMap.put(violation.copado__Static_Code_Analysis_Result__r.copado__User_Story__c, violationList);
+                            }
+                        }
+                    }
+                }
+
+            }
+        } catch (Exception e) {
+            System.debug('Custom Validation Metadata not found');
+        }
+
+        return violationComponentMap;
+    }
+
+    public static Boolean compareStaticCodeResults(Map<String, Integer> credentialViolationMap, Map<String, Set<StaticCodeAnalysisResultWrapper>> resultsFromUserStory) {
+        Set<Id> violatedUserStoryIds = new Set<Id>();
+        Map<String, Set<StaticCodeAnalysisResultWrapper>> comparedResultsToReturnMap = resultsFromUserStory;
+        Boolean isViolationDetected = false;
+
+        try{
+            // Iterate through resultsFromUserStory and check if component names and violation counts exist in credentialComponentViolations
+            for (String userStoryIdKey : comparedResultsToReturnMap.keySet()) {
+                Set<StaticCodeAnalysisResultWrapper> userStoryViolations = comparedResultsToReturnMap.get(userStoryIdKey);
+                for (StaticCodeAnalysisResultWrapper violationWrapper : userStoryViolations) {
+                    //Already Existing component in the credential with violation.
+                    if (credentialViolationMap.containsKey(violationWrapper.componentName)) {
+                        if (violationWrapper.violationCount > credentialViolationMap.get(violationWrapper.componentName)) {
+                            violationWrapper.isViolationDetected = true;
+                            violatedUserStoryIds.add(userStoryIdKey);
+                        }
+                    }else{
+                        //New component in US with violation.
+                        violationWrapper.isViolationDetected = true;
+                        violatedUserStoryIds.add(userStoryIdKey);
+                    }
+                }
+            }
+
+            if(violatedUserStoryIds.size() > 0){
+                System.debug('violatedUserStoryIds: '+violatedUserStoryIds);
+                isViolationDetected = true;
+                updateViolatedUserStories(violatedUserStoryIds, comparedResultsToReturnMap);
+            }
+        }catch(Exception e){
+            System.debug('Error in compareStaticCodeResults: '+e.getMessage());
+        }
+
+        return isViolationDetected;
+    }
+
+    public static void updateViolatedUserStories(Set<Id> violatedUserStoryIds, Map<String, Set<StaticCodeAnalysisResultWrapper>> comparedResultsToReturnMap){
+        try{
+            // Update the User Story records if there are any violations
+            if (!violatedUserStoryIds.isEmpty()) {
+                List<copado__User_Story__c> userStoriesToUpdate = [SELECT Id, Is_Code_Analysis_Passed__c FROM copado__User_Story__c WHERE Id IN :violatedUserStoryIds];
+                for (copado__User_Story__c userStory : userStoriesToUpdate) {
+                    if(violatedUserStoryIds.contains(userStory.Id)){
+                        userStory.Is_Code_Analysis_Passed__c = false;
+                        userStory.Static_Code_Validation_Detail__c = comparedResultsToReturnMap.get(userStory.Id) != null ? JSON.serialize(comparedResultsToReturnMap.get(userStory.Id)) : '';
+                    }else{
+                        userStory.Is_Code_Analysis_Passed__c = true;
+                        userStory.Static_Code_Validation_Detail__c = '';
+                    }
+                }
+                update userStoriesToUpdate;
+            }
+        }catch(Exception e){
+            System.debug('Error in updateViolatedUserStories: '+e.getMessage());
+        }
+    }
+
+    @AuraEnabled
+    public static UserStoryDetailWrapper getUserStoryDetail(String userStoryId){
+        copado__User_Story__c userStory = null;
+        UserStoryDetailWrapper userStoryDetailWrapper = new UserStoryDetailWrapper();
+
+        try{
+            userStory = [SELECT Id, Name, Is_Code_Analysis_Passed__c, Static_Code_Validation_Detail__c FROM copado__User_Story__c WHERE Id = :String.escapeSingleQuotes(userStoryId) LIMIT 1];
+
+            if(userStory != null){
+                userStoryDetailWrapper.userStoryDetail = JSON.serialize(userStory);
+
+                copado__Static_Code_Analysis_Result__c latestUSAnalysisResult = [SELECT Name, CreatedDate, Id, copado__Number_of_Violations__c
+                                                                                 FROM copado__Static_Code_Analysis_Result__c
+                                                                                 WHERE copado__User_Story__c =: String.escapeSingleQuotes(userStoryId)
+                                                                                 ORDER BY CreatedDate DESC
+                                                                                 LIMIT 1];
+                String latestCodeAnalysisResultLink = null;
+                if(latestUSAnalysisResult != null){
+                    latestCodeAnalysisResultLink = Url.getOrgDomainUrl() + '/lightning/r/copado__Static_Code_Analysis_Result__c/'+latestUSAnalysisResult.Id+'/related/copado__Static_Code_Analysis_Violations__r/view';
+                    userStoryDetailWrapper.latestCodeAnalysisResultLink = latestCodeAnalysisResultLink;
+                }
+            }
+        }catch(Exception e){
+            System.debug('Error in getUserStoryDetail: '+e.getMessage());
+        }
+
+        return userStoryDetailWrapper;
+    }
+
+    //Wrapper Class
+    public class StaticCodeAnalysisResultWrapper {
+        @AuraEnabled
+        public String componentName {get; set;}
+        @AuraEnabled
+        public Integer violationCount {get; set;}
+        @AuraEnabled
+        public Boolean isViolationDetected {get; set;}
+
+        public StaticCodeAnalysisResultWrapper() {
+            this.componentName = '';
+            this.violationCount = 0;
+            this.isViolationDetected = false;
+        }
+    }
+
+    public class UserStoryDetailWrapper {
+        @AuraEnabled
+        public String userStoryDetail {set; get;}
+        @AuraEnabled
+        public String latestCodeAnalysisResultLink {set; get;}
+
+        public UserStoryDetailWrapper() {
+            this.userStoryDetail = '';
+            this.latestCodeAnalysisResultLink = '';
+        }
+    }
+}

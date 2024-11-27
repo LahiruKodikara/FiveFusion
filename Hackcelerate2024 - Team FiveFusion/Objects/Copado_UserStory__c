@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fields>
+        <fullName>Is_Code_Analysis_Passed__c</fullName>
+        <businessStatus>Hidden</businessStatus>
+        <defaultValue>false</defaultValue>
+        <description>This is to check whether the Static Code Analysis is done and its not having any High Priority Violations. If any, this should be marked as Checked. If not, Unchecked.</description>
+        <externalId>false</externalId>
+        <label>Is Code Analysis Passed</label>
+        <securityClassification>Public</securityClassification>
+        <trackHistory>false</trackHistory>
+        <trackTrending>false</trackTrending>
+        <type>Checkbox</type>
+    </fields>
+    <fields>
+        <fullName>Static_Code_Validation_Detail__c</fullName>
+        <description>Hold the details about the static code analysis validation details</description>
+        <label>Static Code Validation Detail</label>
+        <length>131070</length>
+        <trackHistory>false</trackHistory>
+        <trackTrending>false</trackTrending>
+        <type>LongTextArea</type>
+        <visibleLines>3</visibleLines>
+    </fields>
+   <validationRules>
+        <fullName>Is_Static_Code_Analysis_Pass</fullName>
+        <active>false</active>
+        <description>if the field Is_Code_Analysis_Passed__c is true, Then only user can mark the User Story as &apos;Ready To Promote&apos;</description>
+        <errorConditionFormula>AND(copado__Has_Apex_Code__c &amp;&amp; NOT(Is_Code_Analysis_Passed__c)&amp;&amp; copado__Promote_Change__c==true)</errorConditionFormula>
+        <errorMessage>Cannot mark as Ready to Promote if there is no Code Analysis results.  Run the Static Code Analysis, with out any High Priority Violations</errorMessage>
+    </validationRules>
+</CustomObject>

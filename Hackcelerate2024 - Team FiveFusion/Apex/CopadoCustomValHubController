@@ -1,0 +1,136 @@
+public with sharing class CopadoCustomValHubController {
+
+    @AuraEnabled
+    public static String getUserStoriesForCopadoCusVal(String customValType){
+        List<copado__User_Story__c> userStories = new List<copado__User_Story__c>();
+
+        try{
+            List<copado__User_Story__c> userStoriesList = [SELECT Id, Name, Is_Code_Analysis_Passed__c, Static_Code_Validation_Detail__c
+                                                            FROM copado__User_Story__c
+                                                            ORDER BY CreatedDate DESC
+                                                            LIMIT 2500];
+
+            for(copado__User_Story__c userStory: userStoriesList){
+                if(customValType == 'staticCodeValidation' && String.isNotBlank(userStory.Static_Code_Validation_Detail__c)){
+                    userStories.add(userStory);
+                }//We can have other custom validations
+            }
+
+        }catch (Exception e){
+            System.debug('(COPADO CUSTOM VALIDATION HUB) Error in getUserStoriesForCopadoCusVal: ' + e.getMessage());
+        }
+
+        return JSON.serialize(userStories);
+    }
+
+    @AuraEnabled
+    public static CustomValidationWrapper byPassCustomValidation(String userStoryId, String validationType, String byPassReason){
+        CustomValidationWrapper customValidationWrapper = new CustomValidationWrapper();
+
+        try{
+            copado__User_Story__c userStory = [SELECT Id, Name, copado__Promote_Change__c, copado__Developer__r.Email, Is_Code_Analysis_Passed__c, copado__Has_Apex_Code__c
+                            FROM copado__User_Story__c
+                            WHERE Id = :String.escapeSingleQuotes(userStoryId)
+                            LIMIT 1];
+
+            if(userStory != null){
+                Boolean isCheckReadyToPromote = false;
+
+                if(validationType == 'staticCodeValidation'){
+                    userStory.Is_Code_Analysis_Passed__c = true;
+                    isCheckReadyToPromote = true;
+
+                    if(){//Any dev that hit many 
+                        isCheckReadyToPromote = false;
+                    }
+                }
+
+                if(isCheckReadyToPromote){
+                    userStory.copado__Promote_Change__c = true;
+                }
+
+                update userStory;//Commented By Sanjay for testing purpose
+
+                customValidationWrapper.isdmlSuccess = true;
+
+                String developerEmail = null;
+                if(userStory.copado__Developer__r.Email != null){
+                    developerEmail = userStory.copado__Developer__r.Email;
+                }
+                //Send an email
+                sendEmailAsync(userStory.Name, userStory.copado__User_Story_Title__c, byPassReason, developerEmail);
+            }
+        }catch (Exception ex){
+            customValidationWrapper.isException = true;
+            customValidationWrapper.message = ex.getMessage();
+        }
+
+        return customValidationWrapper;
+    }
+
+    //Send an email
+    @Future
+    public static void sendEmailAsync(String userStoryName, String userStoryTitle, String byPassReason, String developerEmail) {
+        try{
+            Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
+            String mMail = UserInfo.getUserEmail();
+            String[] toAddresses = new List<String> {mMail};
+
+            // Copado_Custom_Validation__mdt validations = Copado_Custom_Validation__mdt.getInstance('Custom_Validation');
+            // if(validations != null) {
+            //     System.debug('Custom Validation Metadata is available.');
+            //     if (String.isNotBlank(validations.Email_Recepients__c)) {
+            //         toAddresses.addAll(validations.Email_Recepients__c.split(','));
+            //     }
+            // }
+
+            if(String.isNotBlank(developerEmail) && !toAddresses.contains(developerEmail) && !developerEmail.contains('invalid')){
+                toAddresses.add(developerEmail);
+            }
+
+            mail.setToAddresses(toAddresses);
+            String subject = 'ByPassed Custom Validation - ' + userStoryName + ' - ' + userStoryTitle;
+            mail.setSubject(subject);
+
+            String emailBody = '<p>Hi CRM Admin Team,</p><p><b>Do not reply! This is an automated email from Salesforce.</b><p>';
+            emailBody += '<p>The Copado custom validation for the User Story - <b>' + userStoryName + '</b> - ' + userStoryTitle + ' has been by-passed successfully.</p>';
+            emailBody += '<p>Reason to By pass Validation: ' + byPassReason + '</p><p>Thanks,<br/>' + UserInfo.getName() + '</p>';
+
+            if(String.isNotBlank(emailBody)){
+                mail.setHtmlBody(emailBody);
+            }else{
+                mail.setPlainTextBody('Error in creating the email body. Please contact System Administrator.');
+            }
+
+            // Send the email
+            Messaging.SendEmailResult[] results = Messaging.sendEmail(new Messaging.SingleEmailMessage[] { mail });
+
+            // Optional: Process the results for logging or error handling
+            for (Messaging.SendEmailResult result : results) {
+                if (result.isSuccess()) {
+                    System.debug('Email sent successfully.');
+                } else {
+                    System.debug('Email send failure: ' + result.getErrors()[0].getMessage());
+                }
+            }
+
+        }catch (Exception e) {
+            System.debug('Error in sendEmail: ' + e.getMessage());
+        }
+    }
+
+    public class CustomValidationWrapper {
+        @AuraEnabled
+        public Boolean isdmlSuccess {get; set;}
+        @AuraEnabled
+        public Boolean isException {get; set;}
+        @AuraEnabled
+        public String message {get; set;}
+
+        public CustomValidationWrapper(){
+            this.isdmlSuccess = false;
+            this.isException = false;
+            this.message = '';
+        }
+    }
+}

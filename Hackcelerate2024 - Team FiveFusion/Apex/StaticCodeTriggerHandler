@@ -1,0 +1,32 @@
+public class StaticCodeResultTriggerHandler extends TriggerHandler {
+
+    public override void afterUpdate() {
+        List<copado__Static_Code_Analysis_Result__c > staticCodeResultNewList = (List<copado__Static_Code_Analysis_Result__c >) Trigger.new;
+        Map<Id,copado__Static_Code_Analysis_Result__c > staticCodeResultOldMap = (Map<Id,copado__Static_Code_Analysis_Result__c >) Trigger.oldMap;
+        List<copado__User_Story__c> updatedUserStoryList = new List<copado__User_Story__c>();
+
+        //Get the Static code analysis results on the credential
+        Map<String, Integer> analysisResultOnCredential = new Map<String, Integer>();
+        analysisResultOnCredential = StaticCodeAnalysisProcessor.getStaticCodeResultsOnCredential();
+
+        if(analysisResultOnCredential.size() > 0){
+            Set<Id> staticCodeResultIds = new Set<Id>();
+
+            for (copado__Static_Code_Analysis_Result__c staticCodeResultNew : staticCodeResultNewList) {
+                staticCodeResultIds.add(staticCodeResultNew.Id);
+            }
+
+            if(staticCodeResultIds.size() > 0){
+                //Get the violations on the static code analysis results for the User story based on Static code analysis result Ids
+                Map<String, Set<StaticCodeAnalysisProcessor.StaticCodeAnalysisResultWrapper>> violationComponentMap = StaticCodeAnalysisProcessor.getViolationsOnUSStaticCodeResults(staticCodeResultIds);
+
+                if(violationComponentMap.size() > 0){
+                    //Compare the results from the credential with the results from the static code analysis results
+                    Boolean isViolationDetected = StaticCodeAnalysisProcessor.compareStaticCodeResults(analysisResultOnCredential, violationComponentMap);
+                }
+            }
+
+        }
+
+    }
+}
